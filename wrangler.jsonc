@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shiddat",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-31",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "routes": [
+    { "pattern": "shiddat.me", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "NEXT_PUBLIC_SYNC_WS_URL": "wss://shiddat-sync-server.onrender.com",
+    "NEXT_PUBLIC_CONNECT_SERVER_URL": "https://shiddat-sync-server.onrender.com"
+  },
+  "build": {
+    "command": "npx @opennextjs/cloudflare build --dangerouslyUseUnsupportedNextVersion"
+  },
+  "minify": true,
+  "observability": {
+    "enabled": true
+  }
+}

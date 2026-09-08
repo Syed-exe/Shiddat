@@ -1,0 +1,21 @@
+{
+  "appId": "com.shiddat.music",
+  "appName": "Shiddat",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": true,
+      "backgroundColor": "#07090E",
+      "showSpinner": false,
+      "androidSplashResourceName": "bg_splash_brand"
+    }
+  }
+}

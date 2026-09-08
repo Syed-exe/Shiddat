@@ -1,0 +1,121 @@
+name: Build & Publish Shiddat Releases
+
+# Builds the Windows installers, macOS installer, and Android APK straight
+# from THIS repo's source (which already carries correct Shiddat branding -
+# name, icons, appId). Never touches a third-party pre-built binary.
+#
+# Triggers:
+#   - Push a tag like v1.3.0 -> full release (all platforms + GitHub Release)
+#   - Manual "Run workflow" button -> same, for testing
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+  NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+  NEXT_PUBLIC_SYNC_WS_URL: ${{ secrets.NEXT_PUBLIC_SYNC_WS_URL }}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run desktop:build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            public/releases/Shiddat-Windows-Universal.exe
+            public/releases/Shiddat-Windows-Portable.exe
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run desktop:build:mac:universal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer
+          path: public/releases/Shiddat-macOS-Universal.dmg
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - run: npm ci
+      - run: npm run apk:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: public/releases/Shiddat-latest.apk
+
+  publish:
+    needs: [build-windows, build-mac, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need a real token (not the default read-only one) so this job
+          # can push the built binaries straight back into the repo.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      - name: Stage installers into public/releases
+        run: |
+          mkdir -p public/releases
+          cp downloaded/windows-installers/Shiddat-Windows-Universal.exe public/releases/Shiddat-Windows-Universal.exe
+          cp downloaded/windows-installers/Shiddat-Windows-Portable.exe public/releases/Shiddat-Windows-Portable.exe
+          cp downloaded/mac-installer/Shiddat-macOS-Universal.dmg public/releases/Shiddat-macOS-Universal.dmg
+          cp downloaded/android-apk/Shiddat-latest.apk public/releases/Shiddat-latest.apk
+          cp downloaded/android-apk/Shiddat-latest.apk public/releases/Shiddat.apk
+          cp downloaded/android-apk/Shiddat-latest.apk public/releases/Shiddat-1.1.0.apk
+
+      # 1) Commit the fresh binaries into the repo itself. Once this lands
+      #    on main and you redeploy, /api/app/download and
+      #    /releases/[filename] serve them straight from your own domain -
+      #    GitHub is never contacted by an end user's browser.
+      - name: Commit installers back to main
+        run: |
+          git config user.name "shiddat-release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add public/releases
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "chore(release): publish ${{ github.ref_name }} installers [skip ci]"
+          git push origin HEAD:main
+
+      # 2) Also publish a GitHub Release with the same files, purely as a
+      #    backup source - this is what the app's proxy fallback uses if a
+      #    given deploy target ever can't hold local files (e.g. Cloudflare
+      #    Workers has no writable disk).
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            public/releases/Shiddat-Windows-Universal.exe
+            public/releases/Shiddat-Windows-Portable.exe
+            public/releases/Shiddat-macOS-Universal.dmg
+            public/releases/Shiddat.apk
+          generate_release_notes: true
